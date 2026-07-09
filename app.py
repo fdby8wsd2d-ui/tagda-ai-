@@ -2,7 +2,30 @@ import streamlit as st
 import sqlite3
 import hashlib
 from datetime import datetime, timedelta
-import re
+from groq import Groq
+
+# ========================================
+# GROQ API SETUP
+# ========================================
+GROQ_API_KEY = st.secrets["GROQ_API_KEY"]
+client = Groq(api_key=GROQ_API_KEY)
+
+def get_ai_response(prompt, history):
+    try:
+        messages = [{"role": "system", "content": "Tum TAGDA AI ho, ek helpful assistant. Hindi-English mix (Hinglish) mein friendly tone se jawaab do."}]
+        for msg in history[-10:]:
+            messages.append({"role": msg["role"], "content": msg["content"]})
+        messages.append({"role": "user", "content": prompt})
+
+        completion = client.chat.completions.create(
+            model="llama-3.3-70b-versatile",
+            messages=messages,
+            temperature=0.7,
+            max_tokens=1024,
+        )
+        return completion.choices[0].message.content
+    except Exception as e:
+        return f"Error aaya bhai: {str(e)}"
 
 # ========================================
 # INITIALIZATION & DATABASE
@@ -65,8 +88,6 @@ st.markdown("""
     .main { background: linear-gradient(135deg, #0a0a1f 0%, #1a1a3e 100%); color: #e0e0ff; }
     h1 { font-family: 'Arial Black'; color: #00ff9d; text-shadow: 0 0 20px #00ff9d; }
     .stButton>button { background: linear-gradient(45deg, #00ff9d, #00b36b); color: #000; font-weight: bold; border-radius: 50px; height: 3em; }
-    .chat-user { background: #1e3a8a; padding: 18px; border-radius: 20px 20px 5px 20px; margin: 12px 0; }
-    .chat-assist { background: #312e81; padding: 18px; border-radius: 5px 20px 20px 20px; margin: 12px 0; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -143,7 +164,6 @@ with st.sidebar:
         st.divider()
         page = st.radio("Main Menu", [
             "Universal Chat",
-            "Image Studio",
             "Plans & Billing",
         ])
 
@@ -165,27 +185,28 @@ if st.session_state.current_user:
     else:
         if page == "Universal Chat":
             st.header("Universal Chat")
-            for msg in st.session_state.chat_history.get(st.session_state.current_user, []):
+
+            if st.session_state.current_user not in st.session_state.chat_history:
+                st.session_state.chat_history[st.session_state.current_user] = []
+
+            for msg in st.session_state.chat_history[st.session_state.current_user]:
                 with st.chat_message(msg["role"]):
                     st.markdown(msg["content"])
 
             prompt = st.chat_input("Type anything...")
             if prompt:
-                if st.session_state.current_user not in st.session_state.chat_history:
-                    st.session_state.chat_history[st.session_state.current_user] = []
                 st.session_state.chat_history[st.session_state.current_user].append({"role": "user", "content": prompt})
                 save_message(st.session_state.current_user, "user", prompt)
                 with st.chat_message("user"):
                     st.markdown(prompt)
+
                 with st.chat_message("assistant"):
-                    response = "Yahan par tum apna AI backend (Gemini/Claude API) jodo taaki real jawaab aaye."
+                    with st.spinner("Soch raha hoon..."):
+                        response = get_ai_response(prompt, st.session_state.chat_history[st.session_state.current_user])
                     st.markdown(response)
+
                 st.session_state.chat_history[st.session_state.current_user].append({"role": "assistant", "content": response})
                 save_message(st.session_state.current_user, "assistant", response)
-
-        elif page == "Image Studio":
-            st.header("Image Studio")
-            st.info("Yahan real image-gen API (jaise Stability/Flux) jodni padegi.")
 
         elif page == "Plans & Billing":
             st.header("Plans & Billing")
