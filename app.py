@@ -1,10 +1,8 @@
 import streamlit as st
 import sqlite3
 import hashlib
-import json
 from datetime import datetime, timedelta
 from groq import Groq
-import streamlit.components.v1 as components
 
 # ========================================
 # GROQ API SETUP
@@ -28,32 +26,6 @@ def get_ai_response(prompt, history):
         return completion.choices[0].message.content
     except Exception as e:
         return f"Error aaya bhai: {str(e)}"
-
-def transcribe_audio(audio_bytes):
-    """Voice ko text mein badalta hai (Groq Whisper)"""
-    try:
-        transcription = client.audio.transcriptions.create(
-            file=("audio.wav", audio_bytes),
-            model="whisper-large-v3",
-        )
-        return transcription.text
-    except Exception as e:
-        return None
-
-def speak_text(text):
-    """Browser ke speaker se text bolwata hai"""
-    safe_text = json.dumps(text)
-    components.html(f"""
-    <script>
-    try {{
-        window.speechSynthesis.cancel();
-        var msg = new SpeechSynthesisUtterance({safe_text});
-        msg.lang = 'hi-IN';
-        msg.rate = 1;
-        window.speechSynthesis.speak(msg);
-    }} catch (e) {{}}
-    </script>
-    """, height=0)
 
 # ========================================
 # INITIALIZATION & DATABASE
@@ -113,41 +85,9 @@ st.set_page_config(page_title="TAGDA AI", page_icon="🔥", layout="wide", initi
 
 st.markdown("""
 <style>
-    .stApp { background-color: #faf9f6; }
-    section[data-testid="stSidebar"] { background-color: #2d2a26; }
-    section[data-testid="stSidebar"] * { color: #f0ece4 !important; }
-    section[data-testid="stSidebar"] input {
-        background-color: #3d3a35 !important;
-        color: #f0ece4 !important;
-        border-radius: 10px !important;
-        border: 1px solid #55504a !important;
-    }
-    h1, h2, h3 { color: #2d2a26; font-family: 'Georgia', serif; font-weight: 600; }
-    .stButton>button {
-        background-color: #c96442;
-        color: #ffffff;
-        font-weight: 500;
-        border-radius: 12px;
-        border: none;
-        height: 2.6em;
-        transition: background-color 0.2s ease;
-    }
-    .stButton>button:hover { background-color: #b5573a; color: #ffffff; }
-    div[data-testid="stChatMessage"] {
-        background-color: #ffffff;
-        border-radius: 16px;
-        padding: 14px 18px;
-        margin-bottom: 10px;
-        border: 1px solid #ece7df;
-        box-shadow: 0 1px 3px rgba(0,0,0,0.04);
-    }
-    div[data-testid="stChatInput"] textarea {
-        border-radius: 14px !important;
-        border: 1px solid #ddd6cc !important;
-        background-color: #ffffff !important;
-    }
-    div[role="radiogroup"] label { padding: 6px 0; }
-    hr { border-color: #55504a; }
+    .main { background: linear-gradient(135deg, #0a0a1f 0%, #1a1a3e 100%); color: #e0e0ff; }
+    h1 { font-family: 'Arial Black'; color: #00ff9d; text-shadow: 0 0 20px #00ff9d; }
+    .stButton>button { background: linear-gradient(45deg, #00ff9d, #00b36b); color: #000; font-weight: bold; border-radius: 50px; height: 3em; }
 </style>
 """, unsafe_allow_html=True)
 
@@ -244,46 +184,16 @@ if st.session_state.current_user:
             st.rerun()
     else:
         if page == "Universal Chat":
-            st.markdown("### Universal Chat")
-            st.caption("Type karo ya bol ke poocho, TAGDA AI ready hai")
+            st.header("Universal Chat")
 
             if st.session_state.current_user not in st.session_state.chat_history:
                 st.session_state.chat_history[st.session_state.current_user] = []
-            if "voice_reply" not in st.session_state:
-                st.session_state.voice_reply = False
-            if "last_spoken" not in st.session_state:
-                st.session_state.last_spoken = None
-
-            st.session_state.voice_reply = st.toggle("🔊 AI jawaab bol ke bhi de", value=st.session_state.voice_reply)
-
-            if len(st.session_state.chat_history[st.session_state.current_user]) == 0:
-                st.markdown(
-                    "<div style='text-align:center; padding: 40px 0; color:#9c9488;'>"
-                    "<div style='font-size:18px;'>Namaste! Type karo ya niche mic se bolo.</div>"
-                    "</div>", unsafe_allow_html=True
-                )
 
             for msg in st.session_state.chat_history[st.session_state.current_user]:
                 with st.chat_message(msg["role"]):
                     st.markdown(msg["content"])
 
-            # Voice input
-            st.caption("🎤 Bolke poochne ke liye niche record karo:")
-            audio_value = st.audio_input("Bolo...", label_visibility="collapsed")
-
-            voice_prompt = None
-            if audio_value is not None:
-                audio_key = f"processed_{hash(audio_value.getvalue())}"
-                if st.session_state.get(audio_key) is None:
-                    with st.spinner("Sun raha hoon..."):
-                        text = transcribe_audio(audio_value.getvalue())
-                    if text:
-                        st.session_state[audio_key] = True
-                        voice_prompt = text
-
-            typed_prompt = st.chat_input("Ya yahan type karo...")
-            prompt = typed_prompt or voice_prompt
-
+            prompt = st.chat_input("Type anything...")
             if prompt:
                 st.session_state.chat_history[st.session_state.current_user].append({"role": "user", "content": prompt})
                 save_message(st.session_state.current_user, "user", prompt)
@@ -294,12 +204,9 @@ if st.session_state.current_user:
                     with st.spinner("Soch raha hoon..."):
                         response = get_ai_response(prompt, st.session_state.chat_history[st.session_state.current_user])
                     st.markdown(response)
-                    if st.session_state.voice_reply:
-                        speak_text(response)
 
                 st.session_state.chat_history[st.session_state.current_user].append({"role": "assistant", "content": response})
                 save_message(st.session_state.current_user, "assistant", response)
-                st.rerun()
 
         elif page == "Plans & Billing":
             st.header("Plans & Billing")
